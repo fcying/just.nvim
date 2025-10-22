@@ -70,15 +70,19 @@ local function popup(msg, level, title)
     notify(msg, level or "info", { title = title or "Just" })
 end
 local function info(msg) popup(msg, "info", "Just") end
-local function warning(msg) popup(msg, "warn", "Just") end
-local function error(msg) popup(msg, "error", "Just") end
+local function warn(msg) popup(msg, "warn", "Just") end
+local function err(msg) popup(msg, "error", "Just") end
 
 local function get_task_names()
     local output = vim.fn.system("just --list")
+    if vim.v.shell_error ~= 0 or output == "" then
+        err("Failed to run 'just --list'. Is just installed?")
+        return {}
+    end
     local lines = util.split(output, "\n")
 
     if lines[1] and util.starts_with(lines[1], "error") then
-        error(output)
+        err(output)
         return {}
     end
     util.shift(lines)
@@ -125,9 +129,9 @@ local function check_keyword_arg(arg)
     elseif arg == "USERNAME" then
         return os.getenv("USER") or "unknown"
     elseif arg == "OS" then
-        return vim.trim(vim.fn.system("uname"))
+        return vim.loop.os_uname().sysname
     elseif arg == "PCNAME" then
-        return vim.trim(vim.fn.system("hostname"))
+        return vim.loop.os_uname().nodename
     end
     return " "
 end
@@ -137,7 +141,7 @@ local function get_task_args(task_name)
 
     local task_info = vim.fn.system(string.format("just -s %s", task_name))
     if vim.v.shell_error ~= 0 then
-        error(("Failed to get task info for '%s'"):format(task_name))
+        err(("Failed to get task info for '%s'"):format(task_name))
         return { args = {}, all = false, fail = true }
     end
 
@@ -170,7 +174,7 @@ local function get_task_args(task_name)
             local initial = default or ""
             local input_val = vim.fn.input(prompt .. ": ", initial)
             if input_val == "" then
-                error(("Argument '%s' is required"):format(prompt))
+                err(("Argument '%s' is required"):format(prompt))
                 return { args = {}, all = false, fail = true }
             end
             table.insert(out_args, ("%s=%s"):format(prompt, input_val))
@@ -188,7 +192,7 @@ end
 
 local function task_runner(task_name)
     if async_worker then
-        error("A task is already running")
+        err("A task is already running")
         return
     end
 
@@ -196,7 +200,7 @@ local function task_runner(task_name)
     local arg_obj = get_task_args(task)
     if arg_obj.fail then return end
     if not arg_obj.all then
-        error("Failed to get all arguments for task")
+        err("Failed to get all arguments for task")
         return
     end
 
@@ -230,6 +234,7 @@ local function task_runner(task_name)
                 vim.schedule(function()
                     vim.cmd(("caddexpr '%s'"):format(data:gsub("'", "''")))
                     if handle then handle.message = data end
+                    vim.cmd("cbottom")
                 end)
             end
         end,
@@ -238,6 +243,7 @@ local function task_runner(task_name)
             if data and data ~= "" then
                 vim.schedule(function()
                     vim.cmd(("caddexpr '%s'"):format(data:gsub("'", "''")))
+                    vim.cmd("cbottom")
                 end)
             end
         end,
@@ -254,16 +260,20 @@ local function task_runner(task_name)
                     { text = "" },
                     { text = ("%s in %.2fs"):format(status, elapsed) },
                 }, "a")
-                vim.cmd("cbottom")
                 if code ~= 0 and config.open_qf_on_error then
                     vim.cmd("copen | wincmd p")
                 end
+                vim.cmd("cbottom")
                 async_worker = nil
             end)
         end,
     })
 
-    async_worker:start()
+    local ok, msg = pcall(function() async_worker:start() end)
+    if not ok then
+        async_worker = nil
+        err("Failed to start job: " .. msg)
+    end
 end
 
 function M.task_select(opts)
@@ -336,7 +346,7 @@ end
 function M.run_select_task()
     local tasks = get_task_names()
     if #tasks == 0 then
-        warning("There are no tasks defined in justfile")
+        warn("There are no tasks defined in justfile")
         return
     end
     if pickers ~= nil then
@@ -349,6 +359,9 @@ end
 function M.stop_current_task()
     if async_worker ~= nil then
         async_worker:shutdown()
+        info("Stopped current task.")
+    else
+        warn("No running task to stop.")
     end
     async_worker = nil
 end
@@ -381,9 +394,9 @@ function M.add_task_template(opts)
         end
     end
 
-    local f, err = io.open(filename, "w")
+    local f, msg = io.open(filename, "w")
     if not f then
-        error(string.format("Failed to create justfile: %s", err))
+        err(string.format("Failed to create justfile: %s", msg))
         return
     end
 
