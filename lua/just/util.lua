@@ -1,32 +1,29 @@
 local M = {}
 local notify
+local loaded = {}
 
 local function popup(msg, level, title)
-    notify(msg, level or "info", { title = title or "Just" })
+    notify(msg, level or vim.log.levels.INFO, { title = title or "Just" })
 end
+function M.info(msg) popup(msg, vim.log.levels.INFO, "Just") end
 
-function M.info(msg) popup(msg, "info", "Just") end
+function M.warn(msg) popup(msg, vim.log.levels.WARN, "Just") end
 
-function M.warn(msg) popup(msg, "warn", "Just") end
+function M.err(msg) popup(msg, vim.log.levels.ERROR, "Just") end
 
-function M.err(msg) popup(msg, "error", "Just") end
-
-function M.can_load(module)
-    local ok, _ = pcall(require, module)
-    return ok
-end
-
----@param self string
----@param sep string
----@return string[]
-function string:split(sep)
-    local t = {}
-    local pattern = string.format("([^%s]+)", sep)
-    for part in self:gmatch(pattern) do
-        table.insert(t, part)
+function M.try_require(module)
+    if loaded[module] ~= nil then
+        return loaded[module]
     end
-    return t
+    local ok, lib = pcall(require, module)
+    if ok then
+        loaded[module] = lib
+        return lib
+    end
+    loaded[module] = false
+    return false
 end
+
 function M.split(str, sep)
     local t = {}
     local pattern = string.format("([^%s]+)", sep)
@@ -36,85 +33,16 @@ function M.split(str, sep)
     return t
 end
 
----@param self string
----@param prefix string
----@return boolean
-function string:starts_with(prefix)
-    return self:sub(1, #prefix) == prefix
-end
 function M.starts_with(str, prefix)
     return string.sub(str, 1, #prefix) == prefix
 end
 
----@param self string
----@param find string
----@param repl string
----@return string
-function string:replace(find, repl)
-    local s, e = self:find(find, 1, true)
-    if not s then
-        return self
-    end
-    return self:sub(1, s - 1) .. repl .. self:sub(e + 1)
-end
-
----@param self string
----@param pattern string
----@param repl string
----@return string
-function string:replace_all(pattern, repl)
-    local s = self:gsub(pattern, repl)
-    return s
-end
-
----@param self string
----@param pos integer
----@param text string
----@return string
-function string:insert(pos, text)
-    return self:sub(1, pos - 1) .. text .. self:sub(pos)
-end
-
----@param count integer
----@return string
-string["repeat"] = function(self, count)
-    return self:rep(count)
-end
-
----@param tbl table
----@return any?
-function M.shift(tbl)
-    table.remove(tbl, 1)
-end;
-
----@param tbl table
----@return any?
-table.pop = function(tbl)
-    table.remove(tbl)
-end
-
----@generic T
----@param sequence T[]
----@param predicate fun(v: T): boolean
----@return T[]
-function table.filter(sequence, predicate)
-    local newlist = {}
-    for _, v in ipairs(sequence) do
-        if predicate(v) then
-            table.insert(newlist, v)
-        end
-    end
-    return newlist
-end
-
 function M.setup()
-    local ok_notify, n = pcall(require, "notify")
-    notify = ok_notify and n or function(msg, level)
-        if level == "error" then
-            vim.api.nvim_echo({ { msg, "ErrorMsg" } }, true, { err = true })
-        else
-            vim.api.nvim_echo({ { msg, "Normal" } }, false, {})
-        end
+    local mod = M.try_require("notify")
+    if mod then
+        notify = mod
+    else
+        notify = vim.notify
     end
 end
 

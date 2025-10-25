@@ -3,37 +3,6 @@ local config = require("just.config").config
 local util = require("just.util")
 
 local async_worker = nil
-local progress
-local pickers = nil
-local finders
-local conf
-local actions
-local action_state
-local themes
-
-local function load_telescope_deps()
-    if pickers ~= nil then
-        return true
-    end
-    local ok = util.can_load("telescope")
-    if not ok then
-        return false
-    end
-    pickers = require("telescope.pickers")
-    finders = require("telescope.finders")
-    conf = require("telescope.config").values
-    actions = require("telescope.actions")
-    action_state = require("telescope.actions.state")
-    themes = require("telescope.themes")
-    return true
-end
-
-local function load_setup_deps()
-    local ok_fidget, f = pcall(require, "fidget")
-    if ok_fidget and f.progress then
-        progress = f.progress
-    end
-end
 
 local keyword_map = {
     FILEPATH = "%:p",
@@ -66,38 +35,6 @@ local function check_keyword_arg(arg)
     return " "
 end
 
-local function get_task_names()
-    local output = vim.fn.system("just --list")
-    if vim.v.shell_error ~= 0 or output == "" then
-        util.err("Failed to run 'just --list'. Is just installed?")
-        return {}
-    end
-    local lines = util.split(output, "\n")
-
-    if lines[1] and util.starts_with(lines[1], "error") then
-        util.err(output)
-        return {}
-    end
-    util.shift(lines)
-
-    local tasks = {}
-    for _, line in ipairs(lines) do
-        local parts = util.split(line, "#")
-        local name = vim.trim(parts[1] or "")
-        local comment = vim.trim(parts[2] or "")
-        if name ~= "" then
-            if pickers then
-                local disp = name
-                if comment ~= "" then disp = disp .. " — " .. comment end
-                table.insert(tasks, { disp, name })
-            else
-                table.insert(tasks, name)
-            end
-        end
-    end
-    return tasks
-end
-
 local function get_task_args(task_name)
     task_name = task_name:match("^(%S+)")
 
@@ -117,7 +54,7 @@ local function get_task_args(task_name)
 
     local signature = useful[1] and useful[1]:match("^[^:]+") or ""
     local parts = util.split(signature, " ")
-    util.shift(parts) -- remove task name itself
+    table.remove(parts, 1)
 
     if #parts == 0 then
         return { args = {}, all = true, fail = false }
@@ -167,9 +104,10 @@ local function task_runner(task_name)
     end
 
     local args = arg_obj.args
-    local handle
-    if progress then
-        handle = progress.handle.create({
+    local handle = nil
+    local fidget = util.try_require("fidget")
+    if fidget then
+        handle = fidget.progress.handle.create({
             title = "",
             message = ("Starting task \"%s\""):format(task),
             lsp_client = { name = "Just" },
@@ -194,7 +132,7 @@ local function task_runner(task_name)
         on_stdout = function(_, data)
             if data and data ~= "" then
                 vim.schedule(function()
-                    vim.fn.setqflist({}, 'a', { items = {{ text=data }} })
+                    vim.fn.setqflist({}, "a", { items = { { text = data } } })
                     if handle then handle.message = data end
                     vim.cmd("cbottom")
                 end)
@@ -204,7 +142,7 @@ local function task_runner(task_name)
         on_stderr = function(_, data)
             if data and data ~= "" then
                 vim.schedule(function()
-                    vim.fn.setqflist({}, 'a', { items = { { text = data, type = 'E' } } })
+                    vim.fn.setqflist({}, "a", { items = { { text = data, type = "E" } } })
                     vim.cmd("cbottom")
                 end)
             end
@@ -238,84 +176,44 @@ local function task_runner(task_name)
     end
 end
 
-local function task_select(opts)
-    opts = opts or {}
-
-    local tasks = get_task_names()
-    if #tasks == 0 then
-        util.err("No tasks found in justfile", "warn")
-        return
+function M.get_task_names()
+    local output = vim.fn.system("just --list")
+    if vim.v.shell_error ~= 0 or output == "" then
+        util.err(("Failed to run 'just --list': %s"):format(output))
+        return {}
     end
+    local lines = util.split(output, "\n")
 
-    if pickers then
-        local picker = pickers.new(
-            themes.get_dropdown(vim.tbl_extend("force", {
-                prompt_title = "Just Tasks",
-                borderchars = config.telescope_borders.preview,
-            }, opts)),
-            {
-                finder = finders.new_table({
-                    results = tasks,
-                    entry_maker = function(entry)
-                        return {
-                            value = entry,
-                            display = entry[1],
-                            ordinal = entry[1],
-                        }
-                    end,
-                }),
-                sorter = conf.generic_sorter(opts),
-                attach_mappings = function(bufnr)
-                    actions.select_default:replace(function()
-                        actions.close(bufnr)
-                        local selection = action_state.get_selected_entry()
-                        if not selection or not selection.value then
-                            util.err("No selection made", "warn")
-                            return
-                        end
-
-                        -- use first word
-                        local full_name = selection.value[2]
-                        local task_name = full_name:match("^(%S+)")
-                        if not task_name then
-                            util.err("Invalid task name")
-                            return
-                        end
-                        task_runner(task_name)
-                    end)
-                    return true
-                end,
-            }
-        )
-        picker:find()
-        return
+    if lines[1] and util.starts_with(lines[1], "error") then
+        util.err(output)
+        return {}
     end
+    -- remove Available recipes:
+    table.remove(lines, 1)
 
-    vim.ui.select(tasks, { prompt = "Select task" }, function(choice)
-        if not choice then
-            util.info("Selection cancelled")
-            return
+    local tasks = {}
+    for _, line in ipairs(lines) do
+        local name = vim.trim(line)
+        if name ~= "" then
+            table.insert(tasks, name)
         end
-        local task_name = choice:match("^(%S+)")
-        if not task_name then
-            util.err("Invalid task name")
-            return
-        end
-        task_runner(task_name)
-    end)
+    end
+    return tasks
 end
 
 function M.run_select_task()
-    local tasks = get_task_names()
+    local tasks = M.get_task_names()
     if #tasks == 0 then
         util.warn("There are no tasks defined in justfile")
         return
     end
-    if pickers ~= nil then
-        task_select(themes.get_dropdown({ borderchars = config.telescope_borders }))
-    else
-        task_select()
-    end
+    require("just.ui").pick_task(tasks, function(task_name)
+        if not task_name or task_name == "" then
+            util.info("Selection cancelled")
+            return
+        end
+        task_runner(task_name)
+    end)
 end
 
 function M.stop_current_task()
@@ -366,11 +264,6 @@ function M.add_task_template(opts)
     f:close()
 
     util.info(string.format("Template justfile created at %s", filename))
-end
-
-function M.setup()
-    load_setup_deps()
-    load_telescope_deps()
 end
 
 return M
