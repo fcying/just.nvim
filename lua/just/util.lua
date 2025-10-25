@@ -1,4 +1,15 @@
 local M = {}
+local notify
+
+local function popup(msg, level, title)
+    notify(msg, level or "info", { title = title or "Just" })
+end
+
+function M.info(msg) popup(msg, "info", "Just") end
+
+function M.warn(msg) popup(msg, "warn", "Just") end
+
+function M.err(msg) popup(msg, "error", "Just") end
 
 function M.can_load(module)
     local ok, _ = pcall(require, module)
@@ -94,6 +105,17 @@ function table.filter(sequence, predicate)
         end
     end
     return newlist
+end
+
+function M.setup()
+    local ok_notify, n = pcall(require, "notify")
+    notify = ok_notify and n or function(msg, level)
+        if level == "error" then
+            vim.api.nvim_echo({ { msg, "ErrorMsg" } }, true, { err = true })
+        else
+            vim.api.nvim_echo({ { msg, "Normal" } }, false, {})
+        end
+    end
 end
 
 return M
