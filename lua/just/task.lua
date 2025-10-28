@@ -120,7 +120,32 @@ local function task_runner(task_name)
         vim.cmd("copen")
         vim.cmd("wincmd p")
     end
-    vim.fn.setqflist({ { text = ("Starting task: just %s %s"):format(task, table.concat(args, " ")) } }, "r")
+
+    local function append_qf_data(data)
+        if async_worker == nil then
+            return
+        end
+
+        if not data or data == "" then
+            data = " "
+        end
+
+        -- clean up special characters
+        data = data:gsub("'", "''")
+        data = data:gsub("%z", "")
+
+        -- Append using :caddexpr (preserves error parsing)
+        vim.cmd(string.format([=[caddexpr '%s']=], data))
+
+        if #data > config.message_limit then
+            data = string.format("%s...", data:sub(1, config.message_limit))
+        end
+
+        if handle then
+            handle.message = data
+        end
+        vim.cmd("cbottom")
+    end
 
     local start_time = os.clock()
     async_worker = require("plenary.job"):new({
@@ -130,22 +155,19 @@ local function task_runner(task_name)
         env = vim.fn.environ(),
 
         on_stdout = function(_, data)
-            if data and data ~= "" then
-                vim.schedule(function()
-                    vim.fn.setqflist({}, "a", { items = { { text = data } } })
-                    if handle then handle.message = data end
-                    vim.cmd("cbottom")
-                end)
-            end
+            vim.schedule(function()
+                append_qf_data(data)
+            end)
         end,
 
         on_stderr = function(_, data)
-            if data and data ~= "" then
-                vim.schedule(function()
-                    vim.fn.setqflist({}, "a", { items = { { text = data, type = "E" } } })
-                    vim.cmd("cbottom")
-                end)
-            end
+            vim.schedule(function()
+                append_qf_data(data)
+            end)
+        end,
+
+        on_start = function()
+            vim.fn.setqflist({ { text = ("Starting task: %s"):format(task_name) } }, "r")
         end,
 
         on_exit = function(_, code)
@@ -163,7 +185,6 @@ local function task_runner(task_name)
                 if code ~= 0 and config.open_qf_on_error then
                     vim.cmd("copen | wincmd p")
                 end
-                vim.cmd("cbottom")
                 async_worker = nil
             end)
         end,
