@@ -178,12 +178,13 @@ local function task_runner(task_name)
                     handle.message = status
                     handle:finish()
                 end
-                vim.fn.setqflist({
-                    { text = "" },
-                    { text = ("%s in %.2fs"):format(status, elapsed) },
-                }, "a")
-                if code ~= 0 and config.open_qf_on_error then
+                vim.fn.setqflist({ { text = ("%s in %.2fs"):format(status, elapsed) } }, "a")
+                if code ~= 0 and config.open_qf_on_error and not should_open_qf then
                     vim.cmd("copen | wincmd p")
+                end
+                vim.cmd("cbottom")
+                if config.post_run then
+                    config.post_run(code)
                 end
                 async_worker = nil
             end)

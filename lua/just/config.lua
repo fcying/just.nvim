@@ -5,6 +5,7 @@ local default_config = {
     open_qf_on_error = true,    -- opens quickfix when task fails
     open_qf_on_run = true,      -- opens quickfix when running `run` task (`:JustRun`)
     open_qf_on_any = false,     -- opens quickfix when running any task (overrides other open_qf options)
+    post_run = nil,             -- function(result): called after job finish
     picker = "ui",              -- which picker to use: "snacks", "telescope", or "ui"
     justfile_name = "justfile",
     justfile_template = [[

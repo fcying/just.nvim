@@ -26,6 +26,7 @@ require("just").setup({
     open_qf_on_error = true,    -- opens quickfix when task fails
     open_qf_on_run = true,      -- opens quickfix when running task (`:Just`)
     open_qf_on_any = false,     -- opens quickfix when running any task (overrides other open_qf options)
+    post_run = nil,             -- callback function triggered after a job finish 
     picker = "ui",              -- which picker to use: "snacks", "telescope", or "ui"
     justfile_name = "justfile",
     justfile_template = [[
