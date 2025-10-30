@@ -1,9 +1,8 @@
 # just.nvim
-[Just](https://github.com/fcying/just.nvim) task runner for neovim.  
-Forked and rewrite from [nxuv/just.nvim](https://github.com/nxuv/just.nvim).
+[Just](https://github.com/casey/just) task runner for neovim.  
 
 ## Installation
-Using [lazy](https://github.com/folke/lazy.nvim)
+With [lazy](https://github.com/folke/lazy.nvim)
 ```lua
 {
     "fcying/just.nvim",
@@ -42,10 +41,17 @@ build:
 ```
 
 ### Usage
-Commands:
-- `Just` - If 0 args supplied runs `default` task, if 1 arg supplied runs task passes as that arg. If ran with bang (`!`) then stops currently running task before executing new one.
-- `JustSelect` - Gives you selection of all tasks in `justfile`.
-- `JustStop` - Stops currently executed task.
-- `JustCreateTemplate` - Creates template `justfile` with included "cheatsheet".
+| Commands | Descriptions |
+|----------|--------------|
+|Just|Run `default` if no args; run given task if one arg; ! stops current task before running new one.|
+|JustSelect|Select a task from `justfile`.|
+|JustStop|Stop current task.|
+|JustCreateTemplate|Create template justfile from `justfile_template`.|
 
 Only one task can be executed at same time.
+
+
+
+---
+Based on [nxuv/just.nvim](https://github.com/nxuv/just.nvim).
+Rewritten and extended for better integration / performance / maintainability.
