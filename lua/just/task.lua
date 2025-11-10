@@ -40,7 +40,7 @@ local function get_task_args(task_name)
 
     local task_info = vim.fn.system(string.format("just -s %s", task_name))
     if vim.v.shell_error ~= 0 then
-        util.err(("Failed to get task info for '%s'"):format(task_name))
+        util.err(("Failed to get task info for '%s': %s"):format(task_name, task_info))
         return { args = {}, all = false, fail = true }
     end
 
