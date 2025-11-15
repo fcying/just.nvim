@@ -147,7 +147,7 @@ local function task_runner(task_name)
         vim.cmd("cbottom")
     end
 
-    local start_time = os.clock()
+    local start_time = vim.loop.hrtime()
     async_worker = require("plenary.job"):new({
         command = "just",
         args = vim.list_extend({ task }, args),
@@ -171,14 +171,15 @@ local function task_runner(task_name)
         end,
 
         on_exit = function(_, code)
-            local elapsed = os.clock() - start_time
+            local status = (code == 0) and "Finished" or "Failed"
+            local elapsed = (vim.loop.hrtime() - start_time) / 1e9
+            local elapsed_str = ("%s in %.2fs"):format(status, elapsed)
             vim.schedule(function()
-                local status = (code == 0) and "Finished" or "Failed"
                 if handle then
-                    handle.message = status
+                    handle.message = elapsed_str
                     handle:finish()
                 end
-                vim.fn.setqflist({ { text = ("%s in %.2fs"):format(status, elapsed) } }, "a")
+                vim.fn.setqflist({ { text = elapsed_str } }, "a")
                 if code ~= 0 and config.open_qf_on_error and not should_open_qf then
                     vim.cmd("copen | wincmd p")
                 end
