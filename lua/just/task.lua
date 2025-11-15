@@ -3,6 +3,27 @@ local config = require("just.config").config
 local util = require("just.util")
 
 local async_worker = nil
+local use_global_justfile = false
+
+local function run_just(cmd)
+    local output = vim.fn.system(cmd)
+    vim.print(cmd)
+    if vim.v.shell_error ~= 0 then
+        if output:match("No justfile found") then
+            if vim.loop.fs_stat(config.global_justfile) then
+                local fallback = vim.deepcopy(cmd)
+                table.insert(fallback, "-f")
+                table.insert(fallback, config.global_justfile)
+                vim.print(fallback)
+                output = vim.fn.system(fallback)
+            end
+            if vim.v.shell_error ~= 0 then
+                return ""
+            end
+        end
+    end
+    return vim.trim(output)
+end
 
 local keyword_map = {
     FILEPATH = "%:p",
@@ -38,9 +59,9 @@ end
 local function get_task_args(task_name)
     task_name = task_name:match("^(%S+)")
 
-    local task_info = vim.fn.system(string.format("just -s %s", task_name))
-    if vim.v.shell_error ~= 0 then
-        util.err(("Failed to get task info for '%s': %s"):format(task_name, task_info))
+    local task_info = run_just({ "just", "-s", task_name })
+    if task_info == "" then
+        util.err(("Failed to get task info for '%s' %s"):format(task_name, task_info))
         return { args = {}, all = false, fail = true }
     end
 
@@ -200,7 +221,7 @@ local function task_runner(task_name)
 end
 
 function M.get_task_names()
-    local output = vim.fn.system("just --list")
+    local output = run_just({ "just", "--list" })
     if vim.v.shell_error ~= 0 or output == "" then
         util.err(("Failed to run 'just --list': %s"):format(output))
         return {}
