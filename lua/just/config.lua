@@ -1,13 +1,16 @@
 local M = {}
 
 local default_config = {
-    message_limit = 32,         -- limit for length of fidget progress message 
-    open_qf_on_error = true,    -- opens quickfix when task fails
-    open_qf_on_run = true,      -- opens quickfix when running `run` task (`:JustRun`)
-    open_qf_on_any = false,     -- opens quickfix when running any task (overrides other open_qf options)
-    post_run = nil,             -- function(result): called after job finish
-    picker = "ui",              -- which picker to use: "snacks", "telescope", or "ui"
-    justfile_name = "justfile",
+    message_limit = 32,                 -- max length of fidget progress message
+    open_qf_on_error = true,            -- open quickfix when task fails
+    open_qf_on_run = true,              -- open quickfix when running task
+    open_qf_on_any = false,             -- always open quickfix (overrides above)
+    post_run = nil,                     -- callback function(return_code) triggered after a job finish
+    picker = "ui",                      -- which picker to use: "snacks", "telescope", or "ui"
+    global_justfile = "~/.justfile",    -- fallback global Justfile
+    justfile_name = "justfile",         -- justfile name for JustCreateTemplate
+
+    -- Template for :JustCreateTemplate
     justfile_template = [[
 # https://just.systems
 

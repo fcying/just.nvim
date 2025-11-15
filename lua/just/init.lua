@@ -6,7 +6,7 @@ function M.setup(opts)
 
     local task = require("just.task")
     vim.api.nvim_create_user_command("Just", task.run_task, {
-        nargs = "?",
+        nargs = "*",
         complete = function()
             local names = task.get_task_names()
             return vim.tbl_map(function(t)

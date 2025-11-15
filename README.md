@@ -7,8 +7,8 @@ With [lazy](https://github.com/folke/lazy.nvim)
 {
     "fcying/just.nvim",
     dependencies = {
-        'nvim-lua/plenary.nvim',            -- async jobs
-        'rcarriga/nvim-notify',             -- general notifications (optional)
+        'nvim-lua/plenary.nvim',            -- async jobs (required)
+        'rcarriga/nvim-notify',             -- notifications (optional)
         'j-hui/fidget.nvim',                -- task progress (optional)
         'folke/snacks.nvim',                -- alternative task picker (optional)
         'nvim-telescope/telescope.nvim',    -- alternative task picker (optional)
@@ -21,13 +21,16 @@ With [lazy](https://github.com/folke/lazy.nvim)
 Default config is:
 ```lua
 require("just").setup({
-    message_limit = 32,         -- limit for length of fidget progress message
-    open_qf_on_error = true,    -- opens quickfix when task fails
-    open_qf_on_run = true,      -- opens quickfix when running task (`:Just`)
-    open_qf_on_any = false,     -- opens quickfix when running any task (overrides other open_qf options)
-    post_run = nil,             -- callback function triggered after a job finish 
-    picker = "ui",              -- which picker to use: "snacks", "telescope", or "ui"
-    justfile_name = "justfile",
+    message_limit = 32,                 -- max length of fidget progress message
+    open_qf_on_error = true,            -- open quickfix when task fails
+    open_qf_on_run = true,              -- open quickfix when running task
+    open_qf_on_any = false,             -- always open quickfix (overrides above)
+    post_run = nil,                     -- callback function(return_code) triggered after a job finish
+    picker = "ui",                      -- which picker to use: "snacks", "telescope", or "ui"
+    global_justfile = "~/.justfile",    -- fallback global Justfile
+    justfile_name = "justfile",         -- justfile name for JustCreateTemplate
+
+    -- Template for :JustCreateTemplate
     justfile_template = [[
 # https://just.systems
 

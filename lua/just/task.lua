@@ -3,6 +3,70 @@ local config = require("just.config").config
 local util = require("just.util")
 
 local async_worker = nil
+local jf_cache = nil
+local cwd_cache = nil
+
+local function probe_justfile()
+    local cwd = vim.fn.getcwd()
+    local err_msg = ""
+
+    -- cwd changed
+    if cwd_cache ~= cwd then
+        jf_cache = nil
+        cwd_cache = cwd
+    end
+
+    if jf_cache ~= nil then
+        return jf_cache, ""
+    end
+
+    local output = vim.fn.system({ "just", "-l" })
+    if vim.v.shell_error == 0 then
+        jf_cache = { use_global = false }
+        return jf_cache, ""
+    else
+        err_msg = vim.trim(output)
+        if not err_msg:match("No justfile found") then
+            return nil, err_msg
+        end
+    end
+
+    if config.global_justfile and vim.loop.fs_stat(config.global_justfile) then
+        output = vim.fn.system({ "just", "-f", config.global_justfile, "-l" })
+        if vim.v.shell_error == 0 then
+            jf_cache = { use_global = true }
+            return jf_cache, ""
+        else
+            return nil, vim.trim(output)
+        end
+    end
+
+    return nil, err_msg
+end
+
+local function build_just_cmd(jf, args)
+    local cmd = { "just" }
+    if jf.use_global then
+        table.insert(cmd, "-f")
+        table.insert(cmd, config.global_justfile)
+    end
+    vim.list_extend(cmd, args)
+    return cmd
+end
+
+local function run_just(args)
+    local jf, err = probe_justfile()
+    if not jf then
+        return err, 1
+    end
+
+    local cmd = build_just_cmd(jf, args)
+    local output = vim.fn.system(cmd)
+    if vim.v.shell_error ~= 0 then
+        return vim.trim(output), 1
+    end
+    return vim.trim(output), 0
+end
 
 local keyword_map = {
     FILEPATH = "%:p",
@@ -36,18 +100,21 @@ local function check_keyword_arg(arg)
 end
 
 local function get_task_args(task_name)
-    task_name = task_name:match("^(%S+)")
-
-    local task_info = vim.fn.system(string.format("just -s %s", task_name))
-    if vim.v.shell_error ~= 0 then
-        util.err(("Failed to get task info for '%s': %s"):format(task_name, task_info))
+    local task_info, ret = run_just({ "-s", task_name })
+    if ret ~= 0 then
+        util.err(task_info)
         return { args = {}, all = false, fail = true }
     end
 
     local lines = util.split(task_info, "\n")
     local useful = {}
+
+    -- remove unused line
     for _, line in ipairs(lines) do
-        if not (line:match("^#") or line:match("^alias")) then
+        if not (line:match("^#")
+                or line:match("^alias")
+                or line:match("^%[.+%]$"))
+        then
             table.insert(useful, line)
         end
     end
@@ -68,6 +135,11 @@ local function get_task_args(task_name)
             name, default = arg:match("^(.-)=(.*)$")
         end
 
+        -- remove ""
+        if default and default:match('^".*"$') then
+            default = default:sub(2, -2)
+        end
+
         if keyword == " " then
             local prompt = name or arg
             local initial = default or ""
@@ -76,9 +148,11 @@ local function get_task_args(task_name)
                 util.err(("Argument '%s' is required"):format(prompt))
                 return { args = {}, all = false, fail = true }
             end
-            table.insert(out_args, ("%s=%s"):format(prompt, input_val))
+            -- table.insert(out_args, ("%s=%s"):format(prompt, input_val))
+            table.insert(out_args, ("%s"):format(input_val))
         else
-            table.insert(out_args, ("%s=%s"):format(name or arg, default or keyword))
+            -- table.insert(out_args, ("%s=%s"):format(name or arg, default or keyword))
+            table.insert(out_args, ("%s"):format(default or keyword))
         end
     end
 
@@ -89,33 +163,32 @@ local function get_task_args(task_name)
     }
 end
 
-local function task_runner(task_name)
+local function task_async_runner(args)
     if async_worker then
         util.err("A task is already running")
         return
     end
 
-    local task = task_name:match("^(%S+)") or task_name
-    local arg_obj = get_task_args(task)
-    if arg_obj.fail then return end
-    if not arg_obj.all then
-        util.err("Failed to get all arguments for task")
+    local jf, err = probe_justfile()
+    if not jf then
+        util.err(err)
         return
     end
 
-    local args = arg_obj.args
+    local task_args = table.concat(args, " ")
+    local cmd = build_just_cmd(jf, args)
     local handle = nil
     local fidget = util.try_require("fidget")
     if fidget then
         handle = fidget.progress.handle.create({
             title = "",
-            message = ("Starting task \"%s\""):format(task),
+            message = ("Starting task \"%s\""):format(task_args),
             lsp_client = { name = "Just" },
             percentage = 0,
         })
     end
 
-    local should_open_qf = config.open_qf_on_any or (config.open_qf_on_run and task == "run")
+    local should_open_qf = config.open_qf_on_any or config.open_qf_on_run
     if should_open_qf then
         vim.cmd("copen")
         vim.cmd("wincmd p")
@@ -149,8 +222,8 @@ local function task_runner(task_name)
 
     local start_time = vim.loop.hrtime()
     async_worker = require("plenary.job"):new({
-        command = "just",
-        args = vim.list_extend({ task }, args),
+        command = cmd[1],
+        args = vim.list_slice(cmd, 2),
         cwd = vim.fn.getcwd(),
         env = vim.fn.environ(),
 
@@ -167,7 +240,7 @@ local function task_runner(task_name)
         end,
 
         on_start = function()
-            vim.fn.setqflist({ { text = ("Starting task: %s"):format(task_name) } }, "r")
+            vim.fn.setqflist({ { text = ("Starting task: %s"):format(task_args) } }, "r")
         end,
 
         on_exit = function(_, code)
@@ -182,6 +255,9 @@ local function task_runner(task_name)
                 vim.fn.setqflist({ { text = elapsed_str } }, "a")
                 if code ~= 0 and config.open_qf_on_error and not should_open_qf then
                     vim.cmd("copen | wincmd p")
+                end
+                if code == 0 and config.open_qf_on_run and not config.open_qf_on_any then
+                    vim.cmd("cclose")
                 end
                 vim.cmd("cbottom")
                 if config.post_run then
@@ -200,9 +276,9 @@ local function task_runner(task_name)
 end
 
 function M.get_task_names()
-    local output = vim.fn.system("just --list")
-    if vim.v.shell_error ~= 0 or output == "" then
-        util.err(("Failed to run 'just --list': %s"):format(output))
+    local output, ret = run_just({ "--list" })
+    if ret ~= 0 then
+        util.err(output)
         return {}
     end
     local lines = util.split(output, "\n")
@@ -227,7 +303,6 @@ end
 function M.run_select_task()
     local tasks = M.get_task_names()
     if #tasks == 0 then
-        util.warn("There are no tasks defined in justfile")
         return
     end
     require("just.ui").pick_task(tasks, function(task_name)
@@ -235,7 +310,16 @@ function M.run_select_task()
             util.info("Selection cancelled")
             return
         end
-        task_runner(task_name)
+        task_name = task_name:match("^(%S+)")
+        local arg_obj = get_task_args(task_name)
+        if arg_obj.fail then return end
+        if not arg_obj.all then
+            util.err("Failed to get all arguments for task")
+            return
+        end
+        local args = { task_name }
+        vim.list_extend(args, arg_obj.args)
+        task_async_runner(args)
     end)
 end
 
@@ -254,9 +338,9 @@ function M.run_task(args)
         M.stop_current_task()
     end
     if #args.fargs == 0 then
-        task_runner("default")
+        task_async_runner({ "default" })
     else
-        task_runner(args.fargs[1])
+        task_async_runner(args.fargs)
     end
 end
 
