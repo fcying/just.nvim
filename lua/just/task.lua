@@ -188,8 +188,7 @@ local function task_async_runner(args)
         })
     end
 
-    local should_open_qf = config.open_qf_on_any or config.open_qf_on_run
-    if should_open_qf then
+    if config.open_qf_on_start then
         vim.cmd("copen")
         vim.cmd("wincmd p")
     end
@@ -253,10 +252,10 @@ local function task_async_runner(args)
                     handle:finish()
                 end
                 vim.fn.setqflist({ { text = elapsed_str } }, "a")
-                if code ~= 0 and config.open_qf_on_error and not should_open_qf then
+                if code ~= 0 and config.open_qf_on_error and not config.open_qf_on_start then
                     vim.cmd("copen | wincmd p")
                 end
-                if code == 0 and config.open_qf_on_run and not config.open_qf_on_any then
+                if code == 0 and config.close_qf_on_success then
                     vim.cmd("cclose")
                 end
                 vim.cmd("cbottom")

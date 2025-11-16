@@ -22,9 +22,9 @@ Default config is:
 ```lua
 require("just").setup({
     message_limit = 32,                 -- max length of fidget progress message
-    open_qf_on_error = true,            -- open quickfix when task fails
-    open_qf_on_run = true,              -- open quickfix when running task
-    open_qf_on_any = false,             -- always open quickfix (overrides above)
+    open_qf_on_error = false,           -- open quickfix when task fail
+    open_qf_on_start = true,            -- open quickfix when task start
+    close_qf_on_success = false,        -- close quickfix when task success
     post_run = nil,                     -- callback function(return_code) triggered after a job finish
     picker = "ui",                      -- which picker to use: "snacks", "telescope", or "ui"
     global_justfile = "~/.justfile",    -- fallback global Justfile
