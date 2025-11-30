@@ -13,6 +13,7 @@ With [lazy](https://github.com/folke/lazy.nvim)
         'folke/snacks.nvim',                -- alternative task picker (optional)
         'nvim-telescope/telescope.nvim',    -- alternative task picker (optional)
     },
+    cmd = { "Just", "JustSelect", "JustStop", "JustCreateTemplate" },
     config = true
 }
 ```
